@@ -266,7 +266,7 @@
 'use strict';
 
 // Stamped by `node bump-version.js` (which also writes version.json). Do not edit by hand.
-const VERSION = '20261027015538';
+const VERSION = '20261027021100';
 
 /*ENGINE-START*/
 /* Shared engine: no DOM. Embedded into index.html between ENGINE markers and
@@ -1372,8 +1372,12 @@ $('vreplay').onclick = () => { SFX.click(); initState(); };
 $('vmap').onclick = () => { SFX.click(); openHome(); };
 
 /* ---------- home (level select) ---------- */
-function openHome(){ renderHome(); $('home').classList.add('show'); const cur = document.querySelector('#chapters .lt.cur'); if (cur) cur.scrollIntoView({ block: 'center' }); }
-function closeHome(){ $('home').classList.remove('show'); }
+function openHome(){ hideVictory(); renderHome(); $('home').classList.add('show'); const cur = document.querySelector('#chapters .lt.cur'); if (cur) cur.scrollIntoView({ block: 'center' }); }
+function closeHome(){
+  if (!$('home').classList.contains('show')) return;
+  $('home').classList.remove('show');
+  if (won) { if (mode === 'campaign') startLevel(Math.min(lv.n + 1, S.max)); else startLevel(S.cur); }
+}
 function renderHome(){
   const pts = points(), ri = rankIdx(pts);
   $('hrank').textContent = RANKS[ri][0];
@@ -1387,7 +1391,7 @@ function renderHome(){
   $('daily').innerHTML = '<div class="l"><small>Daily puzzle / ' + key + '</small><b>STREAK ' + pad2(live) + '</b><div class="sub">' +
     (rec && rec.s ? 'DONE ' + '★'.repeat(rec.s) + ' IN ' + rec.b : 'BEST STREAK ' + pad2(S.streak.best)) + '</div></div>' +
     '<button id="dailyGo" class="' + (rec && rec.s ? 'done' : '') + '">' + (rec && rec.s ? 'REPLAY' : 'PLAY') + '</button>';
-  $('dailyGo').onclick = () => { SFX.click(); closeHome(); setTimeout(startDaily, 30); };
+  $('dailyGo').onclick = () => { SFX.click(); $('home').classList.remove('show'); setTimeout(startDaily, 30); };
   // chapters
   const chapters = Math.floor((S.max - 1) / 10) + 2;
   let h = '';
@@ -1404,7 +1408,7 @@ function renderHome(){
     h += '</div>';
   }
   $('chapters').innerHTML = h;
-  document.querySelectorAll('#chapters .lt').forEach(b => b.onclick = () => { SFX.click(); closeHome(); const n = +b.dataset.n; setTimeout(() => startLevel(n), 30); });
+  document.querySelectorAll('#chapters .lt').forEach(b => b.onclick = () => { SFX.click(); $('home').classList.remove('show'); const n = +b.dataset.n; setTimeout(() => startLevel(n), 30); });
 }
 $('hclose').onclick = () => { SFX.click(); closeHome(); };
 $('hsound').onclick = () => { S.set.sound = !(S.set.sound !== false); persist(); updateHud(); renderHome(); SFX.click(); };
@@ -1703,7 +1707,7 @@ window.addEventListener('online', checkUpdate);
 window.__slidefill = {
   getLevel, generateLevel, slide, verify, analyze, DIRS, BAKED, hasGL: () => !!gl,
   state: () => ({ mode, n: lv && lv.n, moveCount, trapped, hint: !!hintPath, won, S, painted: Array.from(painted || []) }),
-  startLevel, startDaily, openHome, S: () => S,
+  startLevel, startDaily, openHome, S: () => S, _daily: getDaily,
 };
 layout();
 startLevel(S.cur);
