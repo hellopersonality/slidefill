@@ -1,7 +1,6 @@
 /* Shared engine: no DOM. Embedded into index.html between ENGINE markers and
    evaluated by build-levels.js in Node. */
 const DIRS = [[0,-1],[1,0],[0,1],[-1,0]]; // up, right, down, left
-const K_NORMAL = 0, K_STICKY = 1, K_ONEWAY = 2, K_PORTAL = 3;
 
 function mulberry32(a){
   return function(){
@@ -14,33 +13,16 @@ function mulberry32(a){
 
 function newLevel(W, H){
   const N = W * H;
-  return { W, H, N, start: { x: 0, y: 0 }, floor: new Uint8Array(N), kind: new Uint8Array(N),
-           dir: new Uint8Array(N), mate: new Int16Array(N).fill(-1), moves: [], count: 0, n: 0, par: 0, rating: 1 };
+  return { W, H, N, start: { x: 0, y: 0 }, floor: new Uint8Array(N), moves: [], count: 0, n: 0, par: 0, rating: 1 };
 }
 
-/* Slide from (x,y) in direction d. Returns cells entered as [x, y, jumped]:
-   jumped=1 marks the arrival cell of a portal teleport. Rules:
-   - walls / edges stop the ball
-   - one-way tiles can only be entered moving in their direction
-   - sticky tiles stop the ball when entered
-   - portals teleport to their twin and the slide continues (once per slide) */
+/* Slide from (x,y) in direction d until a wall or the edge. Returns the cells entered as [x, y]. */
 function slide(lv, x, y, d){
-  const { W, H, floor, kind, dir, mate } = lv, dx = DIRS[d][0], dy = DIRS[d][1], path = [];
-  let tp = false;
+  const { W, H, floor } = lv, dx = DIRS[d][0], dy = DIRS[d][1], path = [];
   for (;;){
     const nx = x + dx, ny = y + dy;
-    if (nx < 0 || ny < 0 || nx >= W || ny >= H) break;
-    const i = ny * W + nx;
-    if (!floor[i]) break;
-    const k = kind[i];
-    if (k === K_ONEWAY && dir[i] !== d) break;
-    x = nx; y = ny; path.push([x, y, 0]);
-    if (k === K_STICKY) break;
-    if (k === K_PORTAL && !tp){
-      tp = true;
-      const m = mate[i]; x = m % W; y = (m / W) | 0;
-      path.push([x, y, 1]);
-    }
+    if (nx < 0 || ny < 0 || nx >= W || ny >= H || !floor[ny * W + nx]) break;
+    x = nx; y = ny; path.push([x, y]);
   }
   return path;
 }
@@ -68,46 +50,30 @@ function verify(lv){
 }
 
 /* ---------- construction ----------
-   Walk a legal solution into existence, deciding walls and special tiles as we
-   go. The result is verified by replaying the recorded moves with slide(). */
-function attempt(rng, W, H, M, opt){
+   Walk a legal solution into existence, placing a wall just past each stop.
+   The result is verified by replaying the recorded moves with slide(). */
+function attempt(rng, W, H, M){
   const N = W * H, idx = (x, y) => y * W + x, inb = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
-  const wall = new Uint8Array(N), vis = new Uint8Array(N), kind = new Uint8Array(N), dir = new Uint8Array(N);
-  const mate = new Int16Array(N).fill(-1), entry = new Uint8Array(N), thr = new Uint8Array(N);
+  const wall = new Uint8Array(N), vis = new Uint8Array(N);
   let x = Math.floor(rng() * W), y = Math.floor(rng() * H);
-  const start = { x, y }, sidx = idx(x, y);
-  vis[sidx] = 1; let count = 1; const moves = [];
+  const start = { x, y };
+  vis[idx(x, y)] = 1; let count = 1; const moves = [];
 
   function run(cx, cy, d){
     const dx = DIRS[d][0], dy = DIRS[d][1], cells = [];
     for (;;){
       cx += dx; cy += dy;
-      if (!inb(cx, cy)) break;
-      const i = idx(cx, cy);
-      if (wall[i]) break;
-      const k = kind[i];
-      if (k === K_ONEWAY && dir[i] !== d) break;
-      if (k === K_PORTAL) break;
-      cells.push(i);
-      if (k === K_STICKY) break;
+      if (!inb(cx, cy) || wall[idx(cx, cy)]) break;
+      cells.push(idx(cx, cy));
     }
     return cells;
   }
-  // 0: the ball would keep going, 1: sticky stop, 2: stops (edge/wall/one-way), 3: stops once beyond cell becomes a wall
+  // can the ball stop on e moving in d? (edge/wall beyond, or an unvisited cell that can become a wall)
   function stopOk(e, d){
-    if (kind[e] === K_STICKY) return 1;
     const bx = (e % W) + DIRS[d][0], by = ((e / W) | 0) + DIRS[d][1];
-    if (!inb(bx, by)) return 2;
+    if (!inb(bx, by)) return true;
     const b = idx(bx, by);
-    if (wall[b]) return 2;
-    if (!vis[b]) return 3;
-    if (kind[b] === K_ONEWAY && dir[b] !== d) return 2;
-    return 0;
-  }
-  function mark(i, d, through){
-    if (!vis[i]){ vis[i] = 1; count++; }
-    if (d >= 0) entry[i] |= 1 << d;
-    if (through) thr[i] = 1;
+    return wall[b] || !vis[b];
   }
   function wallBeyond(e, d){
     const bx = (e % W) + DIRS[d][0], by = ((e / W) | 0) + DIRS[d][1];
@@ -121,83 +87,24 @@ function attempt(rng, W, H, M, opt){
       for (let L = 1; L <= cells.length; L++){
         const e = cells[L - 1];
         if (!vis[e]) nw++;
-        if (nw === 0) continue;
-        if (stopOk(e, d)) opts.push({ t: 0, d, L, nw, cells });
-        if (opt.sticky > 0 && kind[e] === K_NORMAL && !thr[e] && e !== sidx) opts.push({ t: 1, d, L, nw, cells });
-      }
-    }
-    if (opt.portal > 0){
-      for (let tr = 0; tr < 6; tr++){
-        const d = (rng() * 4) | 0, cells = run(x, y, d);
-        const cand = [];
-        for (let j = 0; j < cells.length; j++) if (!vis[cells[j]] && kind[cells[j]] === K_NORMAL) cand.push(j);
-        if (!cand.length) continue;
-        const j = cand[(rng() * cand.length) | 0], A = cells[j];
-        let B = -1;
-        for (let k = 0; k < 10; k++){
-          const c = (rng() * N) | 0;
-          if (c !== A && !vis[c] && !wall[c] && cells.slice(0, j + 1).indexOf(c) < 0){ B = c; break; }
-        }
-        if (B < 0) continue;
-        vis[A] = vis[B] = 1; kind[A] = kind[B] = K_PORTAL;
-        const cells2 = run(B % W, (B / W) | 0, d), ends = [];
-        for (let L2 = 0; L2 <= cells2.length; L2++){
-          const e = L2 === 0 ? B : cells2[L2 - 1];
-          if (cells2.slice(0, L2).indexOf(A) >= 0) break;
-          if (stopOk(e, d)) ends.push(L2);
-        }
-        vis[A] = vis[B] = 0; kind[A] = kind[B] = K_NORMAL;
-        if (!ends.length) continue;
-        opts.push({ t: 2, d, A, j, B, L2: ends[(rng() * ends.length) | 0], cells, cells2 });
+        if (nw && stopOk(e, d)) opts.push({ d, L, nw, cells });
       }
     }
     if (!opts.length) break;
     let total = 0;
-    const wt = o => o.t === 0 ? o.nw + 0.5 : o.t === 1 ? opt.sticky * (o.nw + 0.5) : opt.portal * 3;
-    for (const o of opts) total += wt(o);
-    let r = rng() * total, pick = opts[opts.length - 1];
-    for (const o of opts){ r -= wt(o); if (r <= 0){ pick = o; break; } }
-    const o = pick, d = o.d;
-
-    if (o.t === 2){
-      kind[o.A] = kind[o.B] = K_PORTAL; mate[o.A] = o.B; mate[o.B] = o.A;
-      for (let t = 0; t <= o.j; t++) mark(o.cells[t], d, t < o.j);
-      mark(o.B, -1, false);
-      for (let t = 0; t < o.L2; t++) mark(o.cells2[t], d, t < o.L2 - 1);
-      const e = o.L2 === 0 ? o.B : o.cells2[o.L2 - 1];
-      if (kind[e] !== K_STICKY) wallBeyond(e, d);
-      x = e % W; y = (e / W) | 0;
-    } else {
-      for (let t = 0; t < o.L; t++){
-        const c = o.cells[t], through = t < o.L - 1;
-        const eligible = through && kind[c] === K_NORMAL && c !== sidx && (entry[c] & ~(1 << d)) === 0;
-        mark(c, d, through);
-        if (eligible && opt.oneway > 0 && rng() < opt.oneway){ kind[c] = K_ONEWAY; dir[c] = d; }
-      }
-      const e = o.cells[o.L - 1];
-      if (o.t === 1) kind[e] = K_STICKY;
-      else if (kind[e] !== K_STICKY) wallBeyond(e, d);
-      x = e % W; y = (e / W) | 0;
-    }
-    moves.push(d);
+    for (const o of opts) total += o.nw + 0.5;
+    let r = rng() * total, o = opts[opts.length - 1];
+    for (const q of opts){ r -= q.nw + 0.5; if (r <= 0){ o = q; break; } }
+    for (let t = 0; t < o.L; t++){ const c = o.cells[t]; if (!vis[c]){ vis[c] = 1; count++; } }
+    const e = o.cells[o.L - 1];
+    wallBeyond(e, o.d);
+    x = e % W; y = (e / W) | 0;
+    moves.push(o.d);
   }
   const lv = newLevel(W, H);
   lv.start = start; lv.moves = moves; lv.count = count;
-  for (let i = 0; i < N; i++){
-    if (vis[i]){ lv.floor[i] = 1; lv.kind[i] = kind[i]; lv.dir[i] = dir[i]; lv.mate[i] = mate[i]; }
-  }
+  for (let i = 0; i < N; i++) if (vis[i]) lv.floor[i] = 1;
   return verify(lv) ? lv : null;
-}
-
-function mechCount(lv){
-  const m = { sticky: 0, oneway: 0, portal: 0 };
-  for (let i = 0; i < lv.N; i++){
-    if (!lv.floor[i]) continue;
-    if (lv.kind[i] === K_STICKY) m.sticky++;
-    else if (lv.kind[i] === K_ONEWAY) m.oneway++;
-    else if (lv.kind[i] === K_PORTAL) m.portal += 0.5;
-  }
-  return m;
 }
 
 /* ---------- difficulty ---------- */
@@ -252,24 +159,9 @@ function targetT(n){
 function targetScore(n){ return 4.5 + 13 * targetT(n); }
 
 function paramsFor(n){
-  const c = Math.floor((n - 1) / 10);
   const W = Math.min(9, 4 + Math.floor((n - 1) / 8)), H = Math.min(13, W + 4);
   const M = Math.min(20, 4 + Math.floor(n * 0.33));
-  const mech = { sticky: 0, oneway: 0, portal: 0 };
-  if (c === 1) mech.sticky = 1;
-  else if (c === 2){ mech.oneway = 0.35; mech.sticky = 0.3; }
-  else if (c === 3){ mech.portal = 1; mech.sticky = 0.25; mech.oneway = 0.15; }
-  else if (c >= 4){ mech.sticky = 0.6; mech.oneway = 0.25; mech.portal = 0.7; }
-  return { W, H, M, mech, c };
-}
-
-function meetsMechanic(lv, c){
-  const m = mechCount(lv);
-  if (c === 1) return m.sticky >= 1;
-  if (c === 2) return m.oneway >= 1;
-  if (c === 3) return m.portal >= 1;
-  if (c >= 4) return (m.sticky > 0) + (m.oneway > 0) + (m.portal > 0) >= 2;
-  return true;
+  return { W, H, M };
 }
 
 // Optimal solution by BFS from the start; sets lv.moves and lv.par. Returns false if not found within cap.
@@ -292,11 +184,10 @@ function generateLevel(n, o){
   let best = null, bestD = 1e9, fallback = null;
   for (let i = 0; i < cands; i++){
     const M = Math.max(3, P.M + ((rng() * 5) | 0) - 2);
-    const lv = attempt(rng, P.W, P.H, M, P.mech);
+    const lv = attempt(rng, P.W, P.H, M);
     if (!lv) continue;
     if (lv.count < 0.42 * lv.N) continue;
     if (!fallback) fallback = lv;
-    if (!meetsMechanic(lv, P.c)) continue;
     const a = analyze(lv, cap);
     if (a.opt < 0) continue;
     const sc = difficultyScore(a);
@@ -347,48 +238,28 @@ Search.prototype.step = function(ms){
   }
 };
 
-/* ---------- encoding (baked levels) ---------- */
+/* ---------- encoding (baked levels) ----------
+   W|par|rating|moves|rows, rows joined by '/', '#' wall, '.' floor, '@' start */
 function encodeLevel(lv){
-  const rows = [], arrows = '^>v<';
+  const rows = [];
   for (let y = 0; y < lv.H; y++){
     let r = '';
     for (let x = 0; x < lv.W; x++){
       const i = y * lv.W + x;
-      if (!lv.floor[i]) r += '#';
-      else if (x === lv.start.x && y === lv.start.y) r += '@';
-      else if (lv.kind[i] === K_STICKY) r += 'g';
-      else if (lv.kind[i] === K_ONEWAY) r += arrows[lv.dir[i]];
-      else if (lv.kind[i] === K_PORTAL){
-        const m = lv.mate[i];
-        // pair letter = index of the lower cell of the pair
-        r += String.fromCharCode(65 + pairIndex(lv, Math.min(i, m)));
-      }
-      else r += '.';
+      r += !lv.floor[i] ? '#' : x === lv.start.x && y === lv.start.y ? '@' : '.';
     }
     rows.push(r);
   }
   return [lv.W, lv.par, lv.rating, lv.moves.join(''), rows.join('/')].join('|');
 }
-function pairIndex(lv, lo){
-  let k = 0;
-  for (let i = 0; i < lo; i++) if (lv.floor[i] && lv.kind[i] === K_PORTAL && lv.mate[i] > i) k++;
-  return k;
-}
 function decodeLevel(str, n){
   const [Ws, par, rating, moves, rowsS] = str.split('|');
   const rows = rowsS.split('/'), W = +Ws, H = rows.length, lv = newLevel(W, H);
-  const arrows = '^>v<', pend = {};
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
     const c = rows[y][x], i = y * W + x;
     if (c === '#') continue;
     lv.floor[i] = 1; lv.count++;
     if (c === '@') lv.start = { x, y };
-    else if (c === 'g') lv.kind[i] = K_STICKY;
-    else if (arrows.indexOf(c) >= 0){ lv.kind[i] = K_ONEWAY; lv.dir[i] = arrows.indexOf(c); }
-    else if (c >= 'A' && c <= 'Z'){
-      lv.kind[i] = K_PORTAL;
-      if (pend[c] !== undefined){ lv.mate[i] = pend[c]; lv.mate[pend[c]] = i; } else pend[c] = i;
-    }
   }
   lv.par = +par; lv.rating = +rating; lv.n = n;
   lv.moves = moves.split('').map(Number);
