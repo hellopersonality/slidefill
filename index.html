@@ -49,18 +49,47 @@
   #fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   .vwrap{position:relative;width:min(360px,calc(100% - 28px));display:flex;flex-direction:column;gap:14px;text-align:center}
   #vsec{font:600 11px var(--mono);letter-spacing:.2em;color:#9a9cab;animation:rise .4s both}
-  #vtitle{margin:0;font-size:60px;font-weight:800;letter-spacing:-.04em;line-height:1;color:transparent;
+  #victory::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.6),transparent 60%);animation:vflash .7s ease-out forwards}
+  @keyframes vflash{from{opacity:1}to{opacity:0}}
+  #vtitle{margin:0;font-size:60px;font-weight:800;letter-spacing:-.04em;line-height:1;white-space:nowrap}
+  #vtitle span{display:inline-block;color:transparent;
     background:linear-gradient(90deg,#ff9f1c,#ff3b30,#ff2e93,#a56bff,#3d63ff,#4aa8ff,#19d3c5,#ffd60a,#ff9f1c) 0 0/200% 100%;
-    -webkit-background-clip:text;background-clip:text;animation:pop .6s cubic-bezier(.2,1.6,.4,1) both,shine 2.4s linear infinite}
+    -webkit-background-clip:text;background-clip:text;
+    animation:letter .65s cubic-bezier(.2,1.7,.4,1) both,shine 2.4s linear infinite;
+    animation-delay:calc(var(--i)*.06s),calc(var(--i)*-.3s)}
+  @keyframes letter{from{transform:translateY(-50px) scale(.2) rotate(-14deg);opacity:0}to{transform:none;opacity:1}}
   .stars{display:flex;justify-content:center;gap:10px}
-  .stars i{font-style:normal;font-size:48px;line-height:1;color:#23252d}
-  .stars i.on{color:var(--y);text-shadow:0 0 20px rgba(255,214,10,.65);animation:pop .55s cubic-bezier(.2,1.8,.4,1) both;animation-delay:calc(.35s + var(--k)*.2s)}
+  .stars i{position:relative;display:inline-block;font-style:normal;font-size:52px;line-height:1;color:#23252d;animation:rise .4s .3s both}
+  .stars i.on{color:var(--y);--d:calc(.35s + var(--k)*.22s);
+    animation:starIn .8s cubic-bezier(.2,1.5,.4,1) both,glow 1.5s ease-in-out infinite alternate;
+    animation-delay:var(--d),calc(var(--d) + .9s)}
+  .stars i.on::after{content:'';position:absolute;left:50%;top:54%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;
+    border:3px solid var(--y);opacity:0;animation:ring .8s ease-out forwards;animation-delay:calc(var(--d) + .3s)}
+  @keyframes starIn{
+    0%{transform:scale(0) rotate(-200deg);opacity:0;filter:brightness(2);text-shadow:0 0 0 rgba(255,214,10,0)}
+    55%{transform:scale(1.6) rotate(18deg);opacity:1;filter:brightness(1.7);text-shadow:0 0 34px rgba(255,214,10,1),0 0 70px rgba(255,160,20,.8)}
+    100%{transform:scale(1) rotate(0);opacity:1;filter:brightness(1);text-shadow:0 0 18px rgba(255,214,10,.7)}}
+  @keyframes glow{from{text-shadow:0 0 18px rgba(255,214,10,.7)}to{text-shadow:0 0 34px rgba(255,214,10,1),0 0 60px rgba(255,160,20,.7)}}
+  @keyframes ring{0%{transform:scale(.4);opacity:.95}100%{transform:scale(5);opacity:0}}
   .vstats{display:flex;gap:8px;justify-content:center}
-  .vstats .tile{animation:rise .5s both}
+  .vstats .tile{animation:tilepop .6s cubic-bezier(.2,1.5,.4,1) both}
   .vstats .tile:nth-child(1){animation-delay:.15s} .vstats .tile:nth-child(2){animation-delay:.25s} .vstats .tile:nth-child(3){animation-delay:.35s}
+  @keyframes tilepop{from{transform:translateY(30px) scale(.8);opacity:0}to{transform:none;opacity:1}}
   .t-eff{flex:1;background:var(--o);color:#000;padding:0 14px;gap:3px}
   #vnext{height:62px;border-radius:22px;border:3px solid #000;background:var(--y);color:#000;font:800 18px var(--num);letter-spacing:.1em;
-    box-shadow:0 0 0 1px #23252d;animation:rise .5s .9s both}
+    box-shadow:0 0 0 1px #23252d;animation:rise .5s 1s both,nudge 1.6s 1.6s ease-in-out infinite}
+  @keyframes nudge{0%,100%{transform:scale(1);box-shadow:0 0 0 1px #23252d,0 0 0 rgba(255,214,10,0)}
+    50%{transform:scale(1.03);box-shadow:0 0 0 1px #23252d,0 0 28px rgba(255,214,10,.55)}}
+  /* screen shake + flash on win */
+  .shake{animation:shake .55s ease-out}
+  @keyframes shake{
+    0%{transform:translate(0,0)} 8%{transform:translate(-10px,5px) rotate(-.5deg)} 18%{transform:translate(9px,-6px) rotate(.5deg)}
+    28%{transform:translate(-8px,-4px) rotate(-.4deg)} 40%{transform:translate(6px,6px) rotate(.3deg)} 52%{transform:translate(-5px,3px)}
+    64%{transform:translate(4px,-3px)} 76%{transform:translate(-3px,2px)} 88%{transform:translate(2px,-1px)} 100%{transform:translate(0,0)}}
+  #flash{position:fixed;inset:0;z-index:4;pointer-events:none;background:#fff;opacity:0}
+  #flash.go{animation:flash .45s ease-out}
+  @keyframes flash{0%{opacity:.4}100%{opacity:0}}
   #vreplay{height:46px;border-radius:18px;border:2px solid var(--line);background:transparent;color:#c9cad6;font:700 13px var(--mono);letter-spacing:.16em;animation:rise .5s 1s both}
   #vnext:active,#vreplay:active{transform:scale(.97)}
   /* update toast */
@@ -97,6 +126,7 @@
     <button id="restart">RESTART</button>
   </footer>
 </div>
+<div id="flash"></div>
 <button id="upd" hidden><span><small>Update ready</small><b>TAP TO RELOAD</b></span><i>&#8635;</i></button>
 <div id="victory" role="dialog" aria-live="polite">
   <canvas id="fx"></canvas>
@@ -118,7 +148,7 @@
 'use strict';
 
 // Stamped by `node bump-version.js` (which also writes version.json). Do not edit by hand.
-const VERSION = '20261027011908';
+const VERSION = '20261027013030';
 
 /* ---------- level generation ----------
    Levels are built by walking a legal solution into existence:
@@ -506,28 +536,65 @@ function win(){
   $('next').disabled = false;
   winEff = Math.min(100, Math.round(lv.moves.length / moveCount * 100));
   const token = winStart;
-  setTimeout(() => { if (won && winStart === token) showVictory(); }, 1100); // let the board sweep play first
+  setTimeout(() => { if (won && winStart === token) shake(); }, 450);          // board sweep, then a hit
+  setTimeout(() => { if (won && winStart === token) showVictory(); }, 1150);   // then the victory screen
 }
 
 /* ---------- victory screen ---------- */
 const fx = $('fx'), fctx = fx.getContext('2d');
-let conf = [], fxRaf = 0, fxEnd = 0, fxLast = 0;
+let conf = [], sparks = [], fxRaf = 0, fxOn = false, fxEnd = 0, fxLast = 0, vTimers = [];
+
+function shake(){
+  const a = $('app'), f = $('flash');
+  a.classList.remove('shake'); f.classList.remove('go');
+  void a.offsetWidth;
+  a.classList.add('shake'); f.classList.add('go');
+  try { if (navigator.vibrate) navigator.vibrate([40, 30, 70]); } catch (e) {}
+  setTimeout(() => a.classList.remove('shake'), 600);
+}
+
+function countUp(el, to, suffix, delay){
+  const t0 = performance.now() + delay, dur = 800;
+  el.textContent = '0' + suffix;
+  (function step(now){
+    const k = Math.min(1, Math.max(0, (now - t0) / dur));
+    el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))) + suffix;
+    if (k < 1 && $('victory').classList.contains('show')) requestAnimationFrame(step);
+  })(performance.now());
+}
 
 function showVictory(){
   const par = lv.moves.length, diff = moveCount - par;
   const stars = diff <= 0 ? 3 : diff <= 2 ? 2 : 1;
   $('vsec').textContent = 'SECTOR ' + pad2(lv.n);
-  $('vtitle').textContent = ['', 'CLEARED', 'GREAT', 'PERFECT'][stars];
+  $('vtitle').innerHTML = [...['', 'CLEARED', 'GREAT', 'PERFECT'][stars]].map((ch, i) => '<span style="--i:' + i + '">' + ch + '</span>').join('');
   $('vstars').innerHTML = [0, 1, 2].map(k => '<i class="' + (k < stars ? 'on' : '') + '" style="--k:' + k + '">★</i>').join('');
-  $('vmv').textContent = moveCount; $('vpar').textContent = par; $('veff').textContent = winEff + '%';
   $('victory').classList.add('show');
+  countUp($('vmv'), moveCount, '', 350); countUp($('vpar'), par, '', 450); countUp($('veff'), winEff, '%', 550);
   startConfetti(stars);
+  // gold sparks as each lit star lands
+  document.querySelectorAll('#vstars i.on').forEach((el, k) => {
+    vTimers.push(setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      sparksAt(r.left + r.width / 2, r.top + r.height / 2);
+    }, 350 + k * 220 + 280));
+  });
 }
 
 function hideVictory(){
   $('victory').classList.remove('show');
-  cancelAnimationFrame(fxRaf); conf = [];
+  vTimers.forEach(clearTimeout); vTimers = [];
+  cancelAnimationFrame(fxRaf); fxOn = false; conf = []; sparks = [];
   fctx.clearRect(0, 0, fx.width, fx.height);
+  $('app').classList.remove('shake');
+}
+
+function sparksAt(x, y){
+  for (let i = 0; i < 22; i++){
+    const a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 260;
+    sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, r: 1.5 + Math.random() * 2.5, col: Math.random() < .35 ? '255,255,255' : '255,214,10' });
+  }
+  if (!fxOn){ fxOn = true; fxLast = performance.now(); fxRaf = requestAnimationFrame(fxFrame); }
 }
 
 function piece(x, y, vx, vy){
@@ -545,7 +612,7 @@ function startConfetti(stars){
     conf.push(piece(W / 2, H * .4, Math.cos(a) * s, Math.sin(a) * s));
   }
   fxEnd = performance.now() + 1500 + stars * 800; fxLast = performance.now();
-  cancelAnimationFrame(fxRaf); fxRaf = requestAnimationFrame(fxFrame);
+  cancelAnimationFrame(fxRaf); fxOn = true; fxRaf = requestAnimationFrame(fxFrame);
 }
 
 function fxFrame(now){
@@ -563,7 +630,20 @@ function fxFrame(now){
     fctx.restore();
   }
   conf = conf.filter(p => p.y < H + 20);
-  if (conf.length || now < fxEnd) fxRaf = requestAnimationFrame(fxFrame);
+  // sparks: additive glow dots
+  fctx.globalCompositeOperation = 'lighter';
+  for (const s of sparks){
+    s.vx *= Math.pow(.05, dt); s.vy *= Math.pow(.05, dt);
+    s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt * 1.5;
+    if (s.life <= 0) continue;
+    const g = fctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 3);
+    g.addColorStop(0, 'rgba(' + s.col + ',' + s.life + ')'); g.addColorStop(1, 'rgba(' + s.col + ',0)');
+    fctx.fillStyle = g; fctx.beginPath(); fctx.arc(s.x, s.y, s.r * 3, 0, 7); fctx.fill();
+  }
+  fctx.globalCompositeOperation = 'source-over';
+  sparks = sparks.filter(s => s.life > 0);
+  if (conf.length || sparks.length || now < fxEnd) fxRaf = requestAnimationFrame(fxFrame);
+  else fxOn = false;
 }
 
 /* ---------- draw ---------- */
