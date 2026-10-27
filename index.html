@@ -17,9 +17,8 @@
   html,body{margin:0;height:100%;color:#fff;font-family:var(--num);overflow:hidden;overscroll-behavior:none;
     background:#050507;touch-action:none}
   #bg{position:fixed;inset:-44px;z-index:0;pointer-events:none;will-change:transform;
-    background:radial-gradient(#ffffff17 1px,transparent 1.2px) 0 0/22px 22px;animation:drift 5s linear infinite}
+    background:radial-gradient(#ffffff26 1.1px,transparent 1.4px) 0 0/22px 22px;animation:drift 3.5s linear infinite}
   @keyframes drift{to{transform:translate(22px,22px)}}
-  @media (prefers-reduced-motion:reduce){#bg{animation:none}}
   #app{position:relative;z-index:1;height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);max-width:520px;margin:0 auto;touch-action:none}
   small{font:600 10px var(--mono);letter-spacing:.16em;text-transform:uppercase;opacity:.72}
   header{display:flex;gap:8px;padding:12px 0 4px}
@@ -40,8 +39,30 @@
   footer button:active,.nav:active{transform:scale(.97)}
   #hint{position:absolute;left:0;right:0;bottom:40px;text-align:center;font:600 11px var(--mono);letter-spacing:.14em;
     text-transform:uppercase;color:#9a9cab;pointer-events:none;transition:opacity .6s}
-  #go{display:none;flex:2;background:var(--y)}
-  .won #undo{display:none} .won #go{display:block}
+  /* victory screen */
+  #victory{position:fixed;inset:0;z-index:5;display:none;align-items:center;justify-content:center;background:rgba(5,5,7,.8);opacity:0}
+  #victory.show{display:flex;animation:fadein .35s forwards}
+  @keyframes fadein{to{opacity:1}}
+  @keyframes pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes rise{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+  @keyframes shine{to{background-position:200% 0}}
+  #fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .vwrap{position:relative;width:min(360px,calc(100% - 28px));display:flex;flex-direction:column;gap:14px;text-align:center}
+  #vsec{font:600 11px var(--mono);letter-spacing:.2em;color:#9a9cab;animation:rise .4s both}
+  #vtitle{margin:0;font-size:60px;font-weight:800;letter-spacing:-.04em;line-height:1;color:transparent;
+    background:linear-gradient(90deg,#ff9f1c,#ff3b30,#ff2e93,#a56bff,#3d63ff,#4aa8ff,#19d3c5,#ffd60a,#ff9f1c) 0 0/200% 100%;
+    -webkit-background-clip:text;background-clip:text;animation:pop .6s cubic-bezier(.2,1.6,.4,1) both,shine 2.4s linear infinite}
+  .stars{display:flex;justify-content:center;gap:10px}
+  .stars i{font-style:normal;font-size:48px;line-height:1;color:#23252d}
+  .stars i.on{color:var(--y);text-shadow:0 0 20px rgba(255,214,10,.65);animation:pop .55s cubic-bezier(.2,1.8,.4,1) both;animation-delay:calc(.35s + var(--k)*.2s)}
+  .vstats{display:flex;gap:8px;justify-content:center}
+  .vstats .tile{animation:rise .5s both}
+  .vstats .tile:nth-child(1){animation-delay:.15s} .vstats .tile:nth-child(2){animation-delay:.25s} .vstats .tile:nth-child(3){animation-delay:.35s}
+  .t-eff{flex:1;background:var(--o);color:#000;padding:0 14px;gap:3px}
+  #vnext{height:62px;border-radius:22px;border:3px solid #000;background:var(--y);color:#000;font:800 18px var(--num);letter-spacing:.1em;
+    box-shadow:0 0 0 1px #23252d;animation:rise .5s .9s both}
+  #vreplay{height:46px;border-radius:18px;border:2px solid var(--line);background:transparent;color:#c9cad6;font:700 13px var(--mono);letter-spacing:.16em;animation:rise .5s 1s both}
+  #vnext:active,#vreplay:active{transform:scale(.97)}
 </style>
 </head>
 <body>
@@ -62,9 +83,23 @@
   </div>
   <footer>
     <button id="undo">UNDO</button>
-    <button id="go">NEXT</button>
     <button id="restart">RESTART</button>
   </footer>
+</div>
+<div id="victory" role="dialog" aria-live="polite">
+  <canvas id="fx"></canvas>
+  <div class="vwrap">
+    <div id="vsec"></div>
+    <h2 id="vtitle">CLEARED</h2>
+    <div class="stars" id="vstars"></div>
+    <div class="vstats">
+      <div class="tile t-moves"><small>Moves</small><b id="vmv">0</b></div>
+      <div class="tile t-par"><small>Par</small><b id="vpar" style="font-size:28px">0</b></div>
+      <div class="tile t-eff"><small>Eff</small><b id="veff">0</b></div>
+    </div>
+    <button id="vnext">NEXT LEVEL</button>
+    <button id="vreplay">REPLAY</button>
+  </div>
 </div>
 <script>
 (() => {
@@ -167,7 +202,6 @@ function slide(lv, x, y, d){
 const PAL_HEX = ['#ff9f1c', '#ff3b30', '#4aa8ff', '#ffd60a', '#3d63ff', '#19d3c5', '#ff2e93', '#a56bff'];
 const PAL = PAL_HEX.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const MONO = 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
-const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 /* ---------- state ---------- */
 const $ = id => document.getElementById(id);
@@ -322,7 +356,7 @@ function renderGL(now){
   gl.uniform2f(glU.uSize, glc.width, glc.height);
   gl.uniform2f(glU.uGrid, W, H);
   gl.uniform1f(glU.uCell, cs * dpr);
-  gl.uniform1f(glU.uTime, REDUCED ? 0 : now / 1000);
+  gl.uniform1f(glU.uTime, now / 1000);
   gl.uniform1f(glU.uWin, won ? Math.max(0, (now - winStart) / 1000) : -1);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
@@ -340,7 +374,7 @@ function load(n){
   flash[py * lv.W + px] = 1;
   moveCount = 0; history = []; anim = null; particles = []; won = false;
   loadStart = performance.now();
-  $('app').classList.remove('won'); winEff = 0;
+  hideVictory(); winEff = 0;
   $('lvl').textContent = pad2(n);
   $('par').textContent = lv.moves.length;
   $('mv').textContent = 0;
@@ -379,7 +413,7 @@ function undo(){
   const h = history.pop();
   px = h.x; py = h.y; painted = h.painted; stroke = h.stroke; moveCount = h.moves;
   flash.fill(0);
-  won = false; $('app').classList.remove('won');
+  won = false; hideVictory();
   $('mv').textContent = moveCount;
 }
 
@@ -407,12 +441,14 @@ window.addEventListener('keydown', e => {
   if (k in map){ e.preventDefault(); tryMove(map[k]); }
   else if (k === 'z' || k === 'u') undo();
   else if (k === 'r') load(curLevel);
+  else if ((k === 'enter' || k === ' ') && $('victory').classList.contains('show')) load(curLevel + 1);
 });
 $('undo').onclick = undo;
 $('restart').onclick = () => load(curLevel);
 $('prev').onclick = () => { if (curLevel > 1) load(curLevel - 1); };
 $('next').onclick = () => { if (curLevel < maxLevel) load(curLevel + 1); };
-$('go').onclick = () => load(curLevel + 1);
+$('vnext').onclick = () => load(curLevel + 1);
+$('vreplay').onclick = () => load(curLevel);
 new ResizeObserver(layout).observe(stage);
 
 /* ---------- update ---------- */
@@ -454,7 +490,65 @@ function win(){
   if (curLevel >= maxLevel){ maxLevel = curLevel + 1; store('slidefill.max', String(maxLevel)); }
   $('next').disabled = false;
   winEff = Math.min(100, Math.round(lv.moves.length / moveCount * 100));
-  setTimeout(() => { if (won) $('app').classList.add('won'); }, 600);
+  const token = winStart;
+  setTimeout(() => { if (won && winStart === token) showVictory(); }, 1100); // let the board sweep play first
+}
+
+/* ---------- victory screen ---------- */
+const fx = $('fx'), fctx = fx.getContext('2d');
+let conf = [], fxRaf = 0, fxEnd = 0, fxLast = 0;
+
+function showVictory(){
+  const par = lv.moves.length, diff = moveCount - par;
+  const stars = diff <= 0 ? 3 : diff <= 2 ? 2 : 1;
+  $('vsec').textContent = 'SECTOR ' + pad2(lv.n);
+  $('vtitle').textContent = ['', 'CLEARED', 'GREAT', 'PERFECT'][stars];
+  $('vstars').innerHTML = [0, 1, 2].map(k => '<i class="' + (k < stars ? 'on' : '') + '" style="--k:' + k + '">★</i>').join('');
+  $('vmv').textContent = moveCount; $('vpar').textContent = par; $('veff').textContent = winEff + '%';
+  $('victory').classList.add('show');
+  startConfetti(stars);
+}
+
+function hideVictory(){
+  $('victory').classList.remove('show');
+  cancelAnimationFrame(fxRaf); conf = [];
+  fctx.clearRect(0, 0, fx.width, fx.height);
+}
+
+function piece(x, y, vx, vy){
+  const c = PAL[Math.floor(Math.random() * PAL.length)];
+  return { x, y, vx, vy, r: Math.random() * 6.28, vr: (Math.random() - .5) * 12, w: 6 + Math.random() * 7, h: 5 + Math.random() * 6, col: 'rgb(' + c + ')' };
+}
+
+function startConfetti(stars){
+  const d = Math.min(window.devicePixelRatio || 1, 2), W = innerWidth, H = innerHeight;
+  fx.width = Math.round(W * d); fx.height = Math.round(H * d);
+  fctx.setTransform(d, 0, 0, d, 0, 0);
+  conf = [];
+  for (let i = 0; i < 60 + stars * 30; i++){
+    const a = -Math.PI / 2 + (Math.random() - .5) * 2.3, s = 350 + Math.random() * 650;
+    conf.push(piece(W / 2, H * .4, Math.cos(a) * s, Math.sin(a) * s));
+  }
+  fxEnd = performance.now() + 1500 + stars * 800; fxLast = performance.now();
+  cancelAnimationFrame(fxRaf); fxRaf = requestAnimationFrame(fxFrame);
+}
+
+function fxFrame(now){
+  const dt = Math.min(0.05, (now - fxLast) / 1000); fxLast = now;
+  const W = innerWidth, H = innerHeight;
+  if (now < fxEnd && Math.random() < .55) conf.push(piece(Math.random() * W, -12, (Math.random() - .5) * 60, 80 + Math.random() * 120));
+  fctx.clearRect(0, 0, W, H);
+  const damp = Math.pow(.2, dt);
+  for (const p of conf){
+    p.vx *= damp; p.vy = p.vy * damp + 900 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+    fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.r);
+    fctx.fillStyle = p.col;
+    fctx.fillRect(-p.w / 2, -p.h / 2 * Math.abs(Math.cos(p.r * 1.7)), p.w, p.h * Math.abs(Math.cos(p.r * 1.7)) + 1);
+    fctx.restore();
+  }
+  conf = conf.filter(p => p.y < H + 20);
+  if (conf.length || now < fxEnd) fxRaf = requestAnimationFrame(fxFrame);
 }
 
 /* ---------- draw ---------- */
