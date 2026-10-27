@@ -63,6 +63,17 @@
     box-shadow:0 0 0 1px #23252d;animation:rise .5s .9s both}
   #vreplay{height:46px;border-radius:18px;border:2px solid var(--line);background:transparent;color:#c9cad6;font:700 13px var(--mono);letter-spacing:.16em;animation:rise .5s 1s both}
   #vnext:active,#vreplay:active{transform:scale(.97)}
+  /* update toast */
+  #upd{position:fixed;z-index:10;left:50%;top:calc(env(safe-area-inset-top) + 96px);width:min(360px,calc(100% - 28px));
+    display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;border-radius:20px;text-align:left;
+    border:3px solid #000;background:var(--y);color:#000;box-shadow:0 0 0 1px #23252d,0 12px 32px rgba(0,0,0,.55);
+    animation:drop .5s cubic-bezier(.2,1.4,.4,1) both}
+  #upd[hidden]{display:none}
+  #upd small{display:block;margin-bottom:2px}
+  #upd b{font:800 17px var(--num);letter-spacing:.08em}
+  #upd i{font-style:normal;font-size:28px;line-height:1}
+  #upd:active{transform:translateX(-50%) scale(.98)}
+  @keyframes drop{from{transform:translate(-50%,-30px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
 </style>
 </head>
 <body>
@@ -86,6 +97,7 @@
     <button id="restart">RESTART</button>
   </footer>
 </div>
+<button id="upd" hidden><span><small>Update ready</small><b>TAP TO RELOAD</b></span><i>&#8635;</i></button>
 <div id="victory" role="dialog" aria-live="polite">
   <canvas id="fx"></canvas>
   <div class="vwrap">
@@ -104,6 +116,9 @@
 <script>
 (() => {
 'use strict';
+
+// Stamped by `node bump-version.js` (which also writes version.json). Do not edit by hand.
+const VERSION = '20261027011908';
 
 /* ---------- level generation ----------
    Levels are built by walking a legal solution into existence:
@@ -607,6 +622,8 @@ function drawReadouts(total, done){
   ctx.fillText('TILES', cw - 16, ch - 30);
   ctx.fillStyle = '#fff'; ctx.font = '700 20px ' + MONO;
   ctx.fillText(pad2(done) + '/' + pad2(total), cw - 16, ch - 12);
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.font = '600 9px ' + MONO;
+  ctx.fillText('V' + VERSION.slice(4, 8) + '.' + VERSION.slice(8, 12), cw / 2, ch - 12);
 }
 
 function frame(now){
@@ -677,6 +694,30 @@ function frame(now){
   }
   requestAnimationFrame(frame);
 }
+
+/* ---------- update check ----------
+   version.json is deployed next to index.html. If it reports a newer build
+   than the one running, show a toast; tapping it reloads with a cache-busting URL. */
+let updateShown = false;
+async function checkUpdate(){
+  if (updateShown || document.hidden) return;
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && /^\d{14}$/.test(String(j.version)) && Number(j.version) > Number(VERSION)) showUpdate(String(j.version));
+  } catch (e) { /* offline, file://, or blocked: ignore */ }
+}
+function showUpdate(v){
+  updateShown = true;
+  const b = $('upd');
+  b.hidden = false;
+  b.onclick = () => location.replace(location.pathname + '?v=' + v + location.hash);
+}
+setTimeout(checkUpdate, 3000);
+setInterval(checkUpdate, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+window.addEventListener('online', checkUpdate);
 
 window.__slidefill = { generate, slide, DIRS, params, hasGL: () => !!gl };
 layout();
